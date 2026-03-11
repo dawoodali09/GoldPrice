@@ -1,0 +1,356 @@
+@model GoldPrice.Models.MetalViewModel
+@{
+    ViewData["Title"] = "Gold Price Tracker";
+}
+
+<div class="container-fluid">
+    <!-- Alerts -->
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="row">
+        <!-- Current Price Card -->
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card h-100 border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="bi bi-currency-dollar"></i> Current Gold Price</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h2 class="text-warning mb-0">@Model.CurrentPricePerGram.ToString("N2") NZD</h2>
+                        <small class="text-muted">per gram</small>
+                    </div>
+                    <div>
+                        <h5 class="mb-0">@Model.CurrentPricePerOunce.ToString("N2") NZD</h5>
+                        <small class="text-muted">per troy oz</small>
+                    </div>
+                    @if (Model.LastUpdated.HasValue)
+                    {
+                        <hr />
+                        <small class="text-muted">
+                            <i class="bi bi-clock"></i> @Model.LastUpdated.Value.ToLocalTime().ToString("dd MMM yyyy HH:mm")
+                        </small>
+                    }
+                </div>
+                <div class="card-footer">
+                    <form asp-action="FetchPrice" method="post">
+                        <button type="submit" class="btn btn-warning w-100">
+                            <i class="bi bi-arrow-clockwise"></i> Fetch Latest Price
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- My Portfolio Summary Card -->
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card h-100 border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-wallet2"></i> Portfolio Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center">
+                        <h4 class="text-muted mb-1">@Model.MyQuantityGrams.ToString("N2") grams</h4>
+                        <h2 class="text-primary mb-2">@Model.MyTotalWorth.ToString("N2") NZD</h2>
+                        <small class="text-muted">Present Value</small>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#addHoldingModal">
+                        <i class="bi bi-plus-circle"></i> Add Gold Holding
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Investment & Gain/Loss Card -->
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card h-100 @(Model.GainLossAmount >= 0 ? "border-success" : "border-danger")">
+                <div class="card-header @(Model.GainLossAmount >= 0 ? "bg-success" : "bg-danger") text-white">
+                    <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Gain / Loss</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.TotalInvested > 0)
+                    {
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <small class="text-muted d-block">Invested</small>
+                                <h5 class="mb-0">@Model.TotalInvested.ToString("N2")</h5>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted d-block">Current</small>
+                                <h5 class="mb-0">@Model.MyTotalWorth.ToString("N2")</h5>
+                            </div>
+                        </div>
+                        <hr />
+                        <div class="text-center">
+                            <h3 class="@(Model.GainLossAmount >= 0 ? "text-success" : "text-danger") mb-0">
+                                @(Model.GainLossAmount >= 0 ? "+" : "")@Model.GainLossAmount.ToString("N2") NZD
+                            </h3>
+                            <span class="badge @(Model.GainLossPercentage >= 0 ? "bg-success" : "bg-danger") fs-6">
+                                @(Model.GainLossPercentage >= 0 ? "+" : "")@Model.GainLossPercentage.ToString("N2")%
+                            </span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted py-3">
+                            <i class="bi bi-info-circle fs-3"></i>
+                            <p class="mb-0">Add holdings with purchase price to track gain/loss</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Holdings List Card -->
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-list-ul"></i> My Holdings</h5>
+                </div>
+                <div class="card-body p-0" style="max-height: 250px; overflow-y: auto;">
+                    @if (Model.PortfolioItems.Any())
+                    {
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Grams</th>
+                                    <th>Buy Price</th>
+                                    <th>Worth</th>
+                                    <th>G/L</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in Model.PortfolioItems)
+                                {
+                                    <tr>
+                                        <td>
+                                            @item.QuantityGrams.ToString("N2")
+                                            @if (!string.IsNullOrEmpty(item.Description))
+                                            {
+                                                <br /><small class="text-muted">@item.Description</small>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (item.PurchasePrice.HasValue)
+                                            {
+                                                @item.PurchasePrice.Value.ToString("N2")
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">-</span>
+                                            }
+                                        </td>
+                                        <td>@item.CurrentWorth.ToString("N2")</td>
+                                        <td>
+                                            @if (item.GainLossPercentage.HasValue)
+                                            {
+                                                <span class="badge @(item.GainLossPercentage >= 0 ? "bg-success" : "bg-danger")">
+                                                    @(item.GainLossPercentage >= 0 ? "+" : "")@item.GainLossPercentage.Value.ToString("N1")%
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">-</span>
+                                            }
+                                        </td>
+                                        <td class="text-nowrap">
+                                            <button type="button" class="btn btn-sm btn-outline-primary me-1"
+                                                    data-bs-toggle="modal" data-bs-target="#editHoldingModal"
+                                                    data-id="@item.Id"
+                                                    data-quantity="@item.QuantityGrams"
+                                                    data-price="@(item.PurchasePrice?.ToString() ?? "")"
+                                                    data-date="@(item.PurchaseDate?.ToString("yyyy-MM-dd") ?? "")"
+                                                    data-description="@(item.Description ?? "")">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <form asp-action="DeleteHolding" method="post" class="d-inline">
+                                                <input type="hidden" name="id" value="@item.Id" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                        onclick="return confirm('Delete this holding?')">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <div class="p-3 text-center text-muted">
+                            <i class="bi bi-inbox fs-1"></i>
+                            <p>No holdings yet</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Price History Chart -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-graph-up"></i> Price History</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="priceChart" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Holding Modal -->
+<div class="modal fade" id="addHoldingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="AddHolding" method="post">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">Add Gold Holding</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Quantity (grams) *</label>
+                        <input type="number" step="0.0001" name="quantity" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Purchase Price (NZD/gram)</label>
+                        <input type="number" step="0.01" name="purchasePrice" class="form-control"
+                               placeholder="Required for gain/loss calculation" />
+                        <small class="text-muted">Enter the price you paid per gram to track profit/loss</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Purchase Date</label>
+                        <input type="date" name="purchaseDate" class="form-control" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <input type="text" name="description" class="form-control" placeholder="e.g., Gold coin, Gold bar..." />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Add Holding</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Holding Modal -->
+<div class="modal fade" id="editHoldingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="EditHolding" method="post">
+                <input type="hidden" name="id" id="editHoldingId" />
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">Edit Gold Holding</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Quantity (grams) *</label>
+                        <input type="number" step="0.0001" name="quantity" id="editQuantity" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Purchase Price (NZD/gram)</label>
+                        <input type="number" step="0.01" name="purchasePrice" id="editPurchasePrice" class="form-control" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Purchase Date</label>
+                        <input type="date" name="purchaseDate" id="editPurchaseDate" class="form-control" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <input type="text" name="description" id="editDescription" class="form-control" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Edit modal population
+        document.getElementById('editHoldingModal').addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+            document.getElementById('editHoldingId').value = button.getAttribute('data-id');
+            document.getElementById('editQuantity').value = button.getAttribute('data-quantity');
+            document.getElementById('editPurchasePrice').value = button.getAttribute('data-price');
+            document.getElementById('editPurchaseDate').value = button.getAttribute('data-date');
+            document.getElementById('editDescription').value = button.getAttribute('data-description');
+        });
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('@Url.Action("GetPriceHistory")')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length === 0) {
+                        document.getElementById('priceChart').parentElement.innerHTML =
+                            '<div class="text-center text-muted p-5"><i class="bi bi-graph-up fs-1"></i><p>No price history yet. Fetch prices to build history.</p></div>';
+                        return;
+                    }
+
+                    const labels = data.map(d => new Date(d.date).toLocaleDateString());
+                    const prices = data.map(d => d.price);
+
+                    new Chart(document.getElementById('priceChart'), {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Gold Price (NZD/gram)',
+                                data: prices,
+                                borderColor: '#ffc107',
+                                backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                                fill: true,
+                                tension: 0.3
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { display: true }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: false,
+                                    ticks: {
+                                        callback: function(value) {
+                                            return value.toFixed(2) + ' NZD';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                });
+        });
+    </script>
+}
